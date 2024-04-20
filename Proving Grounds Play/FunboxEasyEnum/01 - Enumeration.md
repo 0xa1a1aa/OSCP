@@ -1,4 +1,4 @@
-# Nmap
+co# Nmap
 
 ## TCP
 
@@ -64,4 +64,6 @@ Brute-force login with my script :)
 ```bash
 python3 ~/tools/brute_forge/brute_forge.py -u http://192.168.227.132/phpmyadmin/index.php -l root -P /usr/share/wordlists/seclists/Passwords/Common-Credentials/best110.txt -r phpmyadmin_login.req -t 'token:"(.*?)"' --proxy "http://127.0.0.1:8080" -f "Access denied"
 ```
+=> nothing found
 
+Well-known URIs => nothing found
