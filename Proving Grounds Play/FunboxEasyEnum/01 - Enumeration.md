@@ -1,4 +1,4 @@
-co# Nmap
+# Nmap
 
 ## TCP
 
@@ -67,3 +67,16 @@ python3 ~/tools/brute_forge/brute_forge.py -u http://192.168.227.132/phpmyadmin/
 => nothing found
 
 Well-known URIs => nothing found
+
+Dirbuster brute-force directories and files:
+![[Pasted image 20240420113942.png]]
+=> /mini.php
+
+![[Pasted image 20240420114039.png]]
+
+=> /sercret/
+![[Pasted image 20240420114242.png]]
+harry sally goat oracle lissy
+
+Translate chinese -> english:
+![[Pasted image 20240420114220.png]]
