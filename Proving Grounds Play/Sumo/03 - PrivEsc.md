@@ -36,7 +36,7 @@ Run the exploit:
 It created a new root user "firefart" with our supplied password "sumo":
 ![[Pasted image 20240421140150.png]]
 
-If you cant `su` upgrade the shell, then try again:
+If you cant `su` upgrade the shell, run the below command and try again:
 ```bash
 python -c 'import pty; pty.spawn("/bin/bash")'
 ```

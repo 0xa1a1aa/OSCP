@@ -1,5 +1,5 @@
 **Initial foothold:**
-1) 
+1) Shellshock exploit
 
 **PrivEsc:**
-1) 
+1) Dirty cow kernel exploit
