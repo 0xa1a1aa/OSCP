@@ -4,7 +4,7 @@
 
 Scan for open TCP ports:
 ```bash
-nmap -Pn -p- -oN tcp_all.nmap <ip>
+sudo nmap -Pn -p- -T4 -oN tcp_ports.nmap <ip>
 ```
 Results:
 ```bash
@@ -13,7 +13,11 @@ Results:
 
 Enumerate services:
 ```bash
-nmap -Pn -p  -sV -sC -oN tcp_services.nmap <ip>
+sudo nmap -v -Pn -p $(cat tcp_ports.nmap | grep -Eo '([0-9]{1,5})/tcp' | awk -F '/' '{print $1}' | paste -sd ',') -sV -sC -oA tcp_services <ip>
+```
+Results:
+```bash
+
 ```
 
 ## UDP
