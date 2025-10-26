@@ -4,7 +4,7 @@
 
 Scan for open TCP ports:
 ```bash
-sudo nmap -Pn -p- -T4 -oN tcp_ports.nmap <ip>
+sudo nmap -v -Pn -p- -T4 -oN tcp_ports.nmap <ip>
 ```
 Results:
 ```bash
@@ -24,7 +24,7 @@ Results:
 
 Scan for open UDP ports:
 ```bash
-sudo nmap -Pn -sU -oN udp_default.nmap <ip>
+sudo nmap -v -Pn -sU -oN udp_default.nmap <ip>
 ```
 Results:
 ```bash
