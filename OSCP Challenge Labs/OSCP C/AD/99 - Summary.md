@@ -1,8 +1,14 @@
+## MS01
+
 **Initial foothold:**
-1) AD enum: Kerberoasting -> SPN NTLM hash cracked
-2) Used cracked creds to connect to internal machine MSSQL
-3) MSSQL command exec to reverse shell
+1) Webserver brute force dir => DB exposed with "support" user creds 
 
 **PrivEsc:**
-1) SeImpersonatePrivilege -> PrintSpoofer Exploit -> Reverse Shell as SYSTEM
-2) Mimikatz: Domain Admin creds -> GG
+1) PrivEsc via binary hash cracking
+
+
+## Notes:
+
+Mimikatz alternative:
+   `netexec smb ms01 -u Administrator -p 'December31' --local-auth --sam` and
+   `netexec smb ms01 -u Administrator -p 'December31' --local-auth -M lsassy`

