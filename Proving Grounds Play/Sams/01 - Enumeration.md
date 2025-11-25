@@ -58,9 +58,12 @@ Server: Apache/2.4.48 (Win64) OpenSSL/1.1.1k PHP/7.3.29
 ```
 CVE-2021-40438: not vulnerable
 
-Username?
-```
-Sam Elliot
+Usernames?
+```bash
+# From nmap scan:
+# http-title: Sam Elliot | Web Designer
+Sam
+Elliot
 ```
 
 gobuster
@@ -145,3 +148,4 @@ mysql -h 192.168.229.248 --user=anonymous
 
 # ERROR 2002 (HY000): Received error packet before completion of TLS handshake. The authenticity of the following error cannot be verified: 1130 - Host '192.168.45.184' is not allowed to connect to this MariaDB server
 ```
+=> Our host is not allowed to connect.

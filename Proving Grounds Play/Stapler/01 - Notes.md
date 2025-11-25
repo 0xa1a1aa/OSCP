@@ -354,6 +354,7 @@ ssh SHayslett@10.0.0.26
 # PW: SHayslett
 ```
 
+
 MYSQL
 ```bash
 mysql -h 10.0.0.26 --user=root -p --skip-ssl
