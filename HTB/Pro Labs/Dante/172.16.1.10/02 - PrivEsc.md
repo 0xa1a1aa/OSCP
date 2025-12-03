@@ -33,7 +33,7 @@ cd Sudo-1.8.31-Root-Exploit/
 make
 ./exploit
 ```
-=> Doesnt work this time :(
+=> Doesn't work this time :(
 
 ---
 # SSH

